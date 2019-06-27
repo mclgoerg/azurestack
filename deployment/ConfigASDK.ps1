@@ -1020,9 +1020,11 @@ if ($mn) {
     }
 
     ### Create Cloud Admin Creds ###
-    $cloudAdminUsername = "azurestack\cloudadmin"
-    $cloudAdminCreds = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $cloudAdminUsername, $secureAzureStackAdminPwd -ErrorAction Stop
-
+    if (!$mn) {
+        $cloudAdminUsername = "azurestack\cloudadmin"
+        $cloudAdminCreds = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $cloudAdminUsername, $secureAzureStackAdminPwd -ErrorAction Stop
+    }
+    
     ### Credentials Recap ###
     # $azureRegUsername | Used for Azure AD authentication to register the ASDK if NOT using same Azure AD Creds as deployment
     # $azureRegPwd (and $secureAzureRegPwd) | Used for Azure AD authentication to register the ASDK if NOT using same Azure AD Creds as deployment
