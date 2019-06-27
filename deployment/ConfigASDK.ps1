@@ -2123,16 +2123,16 @@ C:\ConfigASDK\ConfigASDK.ps1, you should find the Scripts folder located at C:\C
     Start-Sleep 3
 
     if ($null -eq $ISOPath2019) {
-        $sm = "45"
-        $med = "82"
-        $lg = "115"
-        $xlg = "115"
+        $sm = 45
+        $med = 82
+        $lg = 115
+        $xlg = 115
     }
     else {
-        $sm = "45"
-        $med = "82"
-        $lg = "115"
-        $xlg = "200"
+        $sm = 45
+        $med = 82
+        $lg = 115
+        $xlg = 200
     }
 
     if ($freeSpace -lt $sm) {
@@ -2145,8 +2145,8 @@ C:\ConfigASDK\ConfigASDK.ps1, you should find the Scripts folder located at C:\C
         # Create images: 1. Ubuntu + Windows Update in parallel 2. Windows Server Core 3. Windows Server Full (+ WS 2019 Core, + WS 2019 Full Optionally)
         $runMode = "serial"
     }
-    elseif ($freeSpace -ge $med -and $freeSpace -lt $lg) {
-        Write-CustomVerbose -Message "Free space is less than $($lg)GB - you don't have enough room on the drive to create all Ubuntu Server and Windows Server images in parallel"
+    elseif ($freeSpace -ge $med -and $freeSpace -lt $xlg) {
+        Write-CustomVerbose -Message "Free space is less than $($xlg)GB - you don't have enough room on the drive to create all Ubuntu Server and Windows Server images in parallel"
         Write-CustomVerbose -Message "Your Ubuntu Server will be created first, then Windows Server images will be created in parallel.  This could take some time."
         # Create images: 1. Ubuntu + Windows Update in parallel 2. Windows Server Core and Windows Server Full in parallel after both prior jobs have finished 3. (+ WS 2019 Core, + WS 2019 Full Optionally)
         $runMode = "partialParallel"
@@ -2162,7 +2162,7 @@ C:\ConfigASDK\ConfigASDK.ps1, you should find the Scripts folder located at C:\C
     $jobName = "AddUbuntuImage"
     $AddUbuntuImage = {
         Start-Job -Name AddUbuntuImage -InitializationScript $export_functions -ArgumentList $ISOpath, $ISOPath2019, $ASDKpath, $customDomainSuffix, $registerASDK, $deploymentMode, $modulePath, `
-            $azureRegSubId, $azureRegTenantID, $tenantID, $azureRegCreds, $asdkCreds, $ScriptLocation, $branch, $sqlServerInstance, $databaseName, $tableName, $mn -ScriptBlock {
+            $azureRegSubId, $azureRegTenantID, $tenantID, $azureRegCreds, $asdkCreds, $ScriptLocation, $branch, $runMode, $sqlServerInstance, $databaseName, $tableName, $mn -ScriptBlock {
             Set-Location $Using:ScriptLocation; .\Scripts\AddImage.ps1 -ASDKpath $Using:ASDKpath `
                 -customDomainSuffix $Using:customDomainSuffix -registerASDK $Using:registerASDK -deploymentMode $Using:deploymentMode -modulePath $Using:modulePath `
                 -azureRegSubId $Using:azureRegSubId -azureRegTenantID $Using:azureRegTenantID -tenantID $Using:TenantID -azureRegCreds $Using:azureRegCreds `
