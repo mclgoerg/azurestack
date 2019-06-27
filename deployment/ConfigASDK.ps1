@@ -220,6 +220,9 @@ param (
     # If you have older hardware that can't handle concurrent VM deployments, use this flag
     [switch]$serialMode,
 
+    # If you have older hardware that can't handle concurrent VM deployments, use this flag
+    [switch]$mn,
+
     # 
     [Parameter(Mandatory = $false)]
     [string]$customDomainSuffix = "local.azurestack.external"
@@ -501,6 +504,14 @@ try {
   Function StageReset { $function:StageReset }
 "@)
 
+if ($mn) {
+    $skipMySQL = $true
+    $skipMSSQL = $true
+    $skipAppService = $true
+    $skipCustomizeHost = $true
+    $registerASDK = $false
+}
+
     ### VALIDATION ##############################################################################################################################################
     #############################################################################################################################################################
 
@@ -594,53 +605,55 @@ try {
     ### HOST MEMORY CHECK ###############################################################################################################################################
     ##############################################################################################################################################################
 
-    Write-CustomVerbose -Message "Validating ASDK host memory to ensure you can deploy the additional resource providers on this system"
-    Write-CustomVerbose -Message "Calculating ASDK host memory"
-    [INT]$totalPhysicalMemory = Get-CimInstance win32_ComputerSystem -Verbose:$false | ForEach-Object { [math]::round($_.TotalPhysicalMemory / 1GB) }
-    Write-CustomVerbose -Message "Total physical memory in the ASDK host = $([INT]$totalPhysicalMemory)GB"
-    [INT]$totalRPMemoryRequired = "0"
-    if (!$skipMySQL) {
-        Write-CustomVerbose -Message "You've chosen to deploy the MySQL Resource Provider. This requires 5.5GB RAM"
-        [INT]$totalRPMemoryRequired = [INT]$totalRPMemoryRequired + 5.5
-    }
-    if (!$skipMSSQL) {
-        Write-CustomVerbose -Message "You've chosen to deploy the SQL Server Resource Provider. This requires 5.5GB RAM"
-        [INT]$totalRPMemoryRequired = [INT]$totalRPMemoryRequired + 5.5
-    }
-    if (!$skipAppService) {
-        Write-CustomVerbose -Message "You've chosen to deploy the App Service Resource Provider. This requires 23GB RAM"
-        [INT]$totalRPMemoryRequired = [INT]$totalRPMemoryRequired + 23
-    }
-    if ([INT]$totalRPMemoryRequired -gt 0) {
-        Write-CustomVerbose -Message "Based on your resource provider selections, you need a total of $([INT]$totalRPMemoryRequired)GB to install the Resource Providers"
-        Write-CustomVerbose -Message "Calculating total current Azure Stack VM memory usage"
-        $azureStackVMs = Get-VM | Where-Object { $_.VMName -like "*Azs*" }
-        $azureStackVMs | Format-Table Name, State, @{n = "Memory"; e = { $_.memoryassigned / 1MB } } -AutoSize
-        Remove-Variable -Name totalVmMemory -Force -ErrorAction SilentlyContinue
-        $totalVmMemory = $azureStackVMs | Measure-Object memoryassigned –sum
-        $totalVmMemory = [math]::round($totalVmMemory.sum / 1GB)
-        [INT]$totalVmMemory = $totalVmMemory
+    if (!$mn) {
+        Write-CustomVerbose -Message "Validating ASDK host memory to ensure you can deploy the additional resource providers on this system"
+        Write-CustomVerbose -Message "Calculating ASDK host memory"
+        [INT]$totalPhysicalMemory = Get-CimInstance win32_ComputerSystem -Verbose:$false | ForEach-Object { [math]::round($_.TotalPhysicalMemory / 1GB) }
         Write-CustomVerbose -Message "Total physical memory in the ASDK host = $([INT]$totalPhysicalMemory)GB"
-        Write-CustomVerbose -Message "Total memory currently assigned to Azure Stack VMs on the ASDK host = $([INT]$totalVmMemory)GB"
-        Write-CustomVerbose -Message "Total memory required by your selected resource provider VMs on the ASDK host = $([INT]$totalRPMemoryRequired)GB"
-        [INT]$memoryAvailable = [INT]$totalPhysicalMemory - [INT]$totalVmMemory
-        if ([INT]$memoryAvailable -gt [INT]$totalRPMemoryRequired) {
-            Write-CustomVerbose -Message "You have $([INT]$memoryAvailable)GB memory available on your host, which is enough to run your chosen resource providers"
-            Remove-Variable -Name totalFreeMemory -Force -ErrorAction SilentlyContinue
-            [INT]$totalFreeMemory = Get-CimInstance Win32_OperatingSystem -Verbose:$false | ForEach-Object { [math]::round($_.FreePhysicalMemory / 1MB) }
-            Write-CustomVerbose -Message "However, the ASDK host OS is reporting a total of $([INT]$totalFreeMemory)GB free physical memory"
-            [INT]$memoryDifference = ([INT]$totalPhysicalMemory - [INT]$totalFreeMemory) - [INT]$totalVmMemory
-            Write-CustomVerbose -Message "This is a difference of $([INT]$memoryDifference)GB on top of the Azure Stack VM usage, and is most likely consumed by system processes and overheads."
-            Write-CustomVerbose -Message "If you run out of memory, this may cause the ASDK Configurator to fail."
-            Start-Sleep 10
+        [INT]$totalRPMemoryRequired = "0"
+        if (!$skipMySQL) {
+            Write-CustomVerbose -Message "You've chosen to deploy the MySQL Resource Provider. This requires 5.5GB RAM"
+            [INT]$totalRPMemoryRequired = [INT]$totalRPMemoryRequired + 5.5
+        }
+        if (!$skipMSSQL) {
+            Write-CustomVerbose -Message "You've chosen to deploy the SQL Server Resource Provider. This requires 5.5GB RAM"
+            [INT]$totalRPMemoryRequired = [INT]$totalRPMemoryRequired + 5.5
+        }
+        if (!$skipAppService) {
+            Write-CustomVerbose -Message "You've chosen to deploy the App Service Resource Provider. This requires 23GB RAM"
+            [INT]$totalRPMemoryRequired = [INT]$totalRPMemoryRequired + 23
+        }
+        if ([INT]$totalRPMemoryRequired -gt 0) {
+            Write-CustomVerbose -Message "Based on your resource provider selections, you need a total of $([INT]$totalRPMemoryRequired)GB to install the Resource Providers"
+            Write-CustomVerbose -Message "Calculating total current Azure Stack VM memory usage"
+            $azureStackVMs = Get-VM | Where-Object { $_.VMName -like "*Azs*" }
+            $azureStackVMs | Format-Table Name, State, @{n = "Memory"; e = { $_.memoryassigned / 1MB } } -AutoSize
+            Remove-Variable -Name totalVmMemory -Force -ErrorAction SilentlyContinue
+            $totalVmMemory = $azureStackVMs | Measure-Object memoryassigned –sum
+            $totalVmMemory = [math]::round($totalVmMemory.sum / 1GB)
+            [INT]$totalVmMemory = $totalVmMemory
+            Write-CustomVerbose -Message "Total physical memory in the ASDK host = $([INT]$totalPhysicalMemory)GB"
+            Write-CustomVerbose -Message "Total memory currently assigned to Azure Stack VMs on the ASDK host = $([INT]$totalVmMemory)GB"
+            Write-CustomVerbose -Message "Total memory required by your selected resource provider VMs on the ASDK host = $([INT]$totalRPMemoryRequired)GB"
+            [INT]$memoryAvailable = [INT]$totalPhysicalMemory - [INT]$totalVmMemory
+            if ([INT]$memoryAvailable -gt [INT]$totalRPMemoryRequired) {
+                Write-CustomVerbose -Message "You have $([INT]$memoryAvailable)GB memory available on your host, which is enough to run your chosen resource providers"
+                Remove-Variable -Name totalFreeMemory -Force -ErrorAction SilentlyContinue
+                [INT]$totalFreeMemory = Get-CimInstance Win32_OperatingSystem -Verbose:$false | ForEach-Object { [math]::round($_.FreePhysicalMemory / 1MB) }
+                Write-CustomVerbose -Message "However, the ASDK host OS is reporting a total of $([INT]$totalFreeMemory)GB free physical memory"
+                [INT]$memoryDifference = ([INT]$totalPhysicalMemory - [INT]$totalFreeMemory) - [INT]$totalVmMemory
+                Write-CustomVerbose -Message "This is a difference of $([INT]$memoryDifference)GB on top of the Azure Stack VM usage, and is most likely consumed by system processes and overheads."
+                Write-CustomVerbose -Message "If you run out of memory, this may cause the ASDK Configurator to fail."
+                Start-Sleep 10
+            }
+            else {
+                throw "Your ASDK host only has $([INT]$memoryAvailable)GB memory remaining, which is less than the required $([INT]$totalRPMemoryRequired)GB for your chosen resource providers.`
+        Add more memory or reduce the number of resource providers that you wish to deploy"
+            }
         }
         else {
-            throw "Your ASDK host only has $([INT]$memoryAvailable)GB memory remaining, which is less than the required $([INT]$totalRPMemoryRequired)GB for your chosen resource providers.`
-    Add more memory or reduce the number of resource providers that you wish to deploy"
+            Write-CustomVerbose -Message "It appears you've chosen to deploy none of the Resource Providers. No need for further host memory checks"
         }
-    }
-    else {
-        Write-CustomVerbose -Message "It appears you've chosen to deploy none of the Resource Providers. No need for further host memory checks"
     }
 
     ### VALIDATION ###############################################################################################################################################
@@ -815,29 +828,31 @@ try {
     }
 
     ### Validate Azure Stack Development Kit Deployment Credentials ###
-    if ([string]::IsNullOrEmpty($azureStackAdminPwd)) {
-        Write-CustomVerbose -Message "You didn't enter the Azure Stack Development Kit Deployment password." 
-        $secureAzureStackAdminPwd = Read-Host "Please enter the password used for the Azure Stack Development Kit Deployment, for account AzureStack\AzureStackAdmin" -AsSecureString -ErrorAction Stop
-        $BSTR = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureAzureStackAdminPwd)            
-        $azureStackAdminPwd = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)  
-    }
-
-    Write-CustomVerbose -Message "Checking to see Azure Stack Admin password is strong..."
-
-    $azureStackAdminUsername = "AzureStack\AzureStackAdmin"
-    if ($azureStackAdminPwd -cmatch $regex -eq $true) {
-        Write-CustomVerbose -Message "Azure Stack Development Kit Deployment password for AzureStack\AzureStackAdmin, meets desired complexity level" 
-        # Convert plain text password to a secure string
-        $secureAzureStackAdminPwd = ConvertTo-SecureString -AsPlainText $azureStackAdminPwd -Force
-        $azureStackAdminCreds = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $azureStackAdminUsername, $secureAzureStackAdminPwd -ErrorAction Stop
-    }
-
-    elseif ($azureStackAdminPwd -cmatch $regex -eq $false) {
-        Write-Host "`r`nAzure Stack Admin (AzureStack\AzureStackAdmin) password is not a strong password.`nIt should ideally be at least 8 characters, with at least 1 upper case, 1 lower case, and 1 special character.`nPlease consider a stronger password in the future.`r`n" -ForegroundColor Cyan
-        Start-Sleep -Seconds 10
-        # Convert plain text password to a secure string
-        $secureAzureStackAdminPwd = ConvertTo-SecureString -AsPlainText $azureStackAdminPwd -Force
-        $azureStackAdminCreds = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $azureStackAdminUsername, $secureAzureStackAdminPwd -ErrorAction Stop
+    if (!$mn) {
+        if ([string]::IsNullOrEmpty($azureStackAdminPwd)) {
+            Write-CustomVerbose -Message "You didn't enter the Azure Stack Development Kit Deployment password." 
+            $secureAzureStackAdminPwd = Read-Host "Please enter the password used for the Azure Stack Development Kit Deployment, for account AzureStack\AzureStackAdmin" -AsSecureString -ErrorAction Stop
+            $BSTR = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureAzureStackAdminPwd)            
+            $azureStackAdminPwd = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)  
+        }
+    
+        Write-CustomVerbose -Message "Checking to see Azure Stack Admin password is strong..."
+    
+        $azureStackAdminUsername = "AzureStack\AzureStackAdmin"
+        if ($azureStackAdminPwd -cmatch $regex -eq $true) {
+            Write-CustomVerbose -Message "Azure Stack Development Kit Deployment password for AzureStack\AzureStackAdmin, meets desired complexity level" 
+            # Convert plain text password to a secure string
+            $secureAzureStackAdminPwd = ConvertTo-SecureString -AsPlainText $azureStackAdminPwd -Force
+            $azureStackAdminCreds = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $azureStackAdminUsername, $secureAzureStackAdminPwd -ErrorAction Stop
+        }
+    
+        elseif ($azureStackAdminPwd -cmatch $regex -eq $false) {
+            Write-Host "`r`nAzure Stack Admin (AzureStack\AzureStackAdmin) password is not a strong password.`nIt should ideally be at least 8 characters, with at least 1 upper case, 1 lower case, and 1 special character.`nPlease consider a stronger password in the future.`r`n" -ForegroundColor Cyan
+            Start-Sleep -Seconds 10
+            # Convert plain text password to a secure string
+            $secureAzureStackAdminPwd = ConvertTo-SecureString -AsPlainText $azureStackAdminPwd -Force
+            $azureStackAdminCreds = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $azureStackAdminUsername, $secureAzureStackAdminPwd -ErrorAction Stop
+        }
     }
 
     ### Credentials Recap ###
@@ -1911,38 +1926,40 @@ try {
 
     if (($progressCheck -eq "Incomplete") -or ($progressCheck -eq "Failed")) {
         try {
-            # Set password expiration to 180 days
-            Write-CustomVerbose -Message "Configuring password expiration policy"
-            Set-ADDefaultDomainPasswordPolicy -MaxPasswordAge 180.00:00:00 -Identity azurestack.local
-            Get-ADDefaultDomainPasswordPolicy
+            if (!$mn) {
+                # Set password expiration to 180 days
+                Write-CustomVerbose -Message "Configuring password expiration policy"
+                Set-ADDefaultDomainPasswordPolicy -MaxPasswordAge 180.00:00:00 -Identity azurestack.local
+                Get-ADDefaultDomainPasswordPolicy
 
-            # Set Power Policy
-            Write-CustomVerbose -Message "Optimizing power policy for high performance"
-            POWERCFG.EXE /S SCHEME_MIN
+                # Set Power Policy
+                Write-CustomVerbose -Message "Optimizing power policy for high performance"
+                POWERCFG.EXE /S SCHEME_MIN
 
-            # Disable Windows Update on infrastructure VMs
-            Write-CustomVerbose -Message "Disabling Windows Update on Infrastructure VMs and ASDK Host`r`n"
-            $AZSvms = Get-VM -Name AZS*
-            $scriptblock = {
-                Get-Service -Name wuauserv | Stop-Service -Force -PassThru | Set-Service -StartupType disabled -Confirm:$false
-            }
-            foreach ($vm in $AZSvms) {
-                Invoke-Command -VMName $vm.name -ScriptBlock $scriptblock -Credential $azureStackAdminCreds
-            }
-
-            # Disable Windows Update and DNS Server on Host - using foreach loop as ASDK on Azure solution doesn't have DNS Server.
-            $serviceArray = @()
-            $serviceArray.Clear()
-            $serviceArray = "wuauserv", "DNS"
-            foreach ($service in $serviceArray) {
-                if (Get-Service -Name $service -ErrorAction SilentlyContinue) {
-                    Write-CustomVerbose -Message "Stopping Service: $service"
-                    Stop-Service -Name $service -Force -PassThru
-                    Write-CustomVerbose -Message "Disabling Service: $service at startup"
-                    Set-Service -Name $service -StartupType disabled -Confirm:$false
+                # Disable Windows Update on infrastructure VMs
+                Write-CustomVerbose -Message "Disabling Windows Update on Infrastructure VMs and ASDK Host`r`n"
+                $AZSvms = Get-VM -Name AZS*
+                $scriptblock = {
+                    Get-Service -Name wuauserv | Stop-Service -Force -PassThru | Set-Service -StartupType disabled -Confirm:$false
                 }
-                else {
-                    Write-CustomVerbose -Message "Service: $service not found, continuing process..."
+                foreach ($vm in $AZSvms) {
+                    Invoke-Command -VMName $vm.name -ScriptBlock $scriptblock -Credential $azureStackAdminCreds
+                }
+
+                # Disable Windows Update and DNS Server on Host - using foreach loop as ASDK on Azure solution doesn't have DNS Server.
+                $serviceArray = @()
+                $serviceArray.Clear()
+                $serviceArray = "wuauserv", "DNS"
+                foreach ($service in $serviceArray) {
+                    if (Get-Service -Name $service -ErrorAction SilentlyContinue) {
+                        Write-CustomVerbose -Message "Stopping Service: $service"
+                        Stop-Service -Name $service -Force -PassThru
+                        Write-CustomVerbose -Message "Disabling Service: $service at startup"
+                        Set-Service -Name $service -StartupType disabled -Confirm:$false
+                    }
+                    else {
+                        Write-CustomVerbose -Message "Service: $service not found, continuing process..."
+                    }
                 }
             }
             StageComplete -progressStage $progressStage
@@ -2092,10 +2109,15 @@ C:\ConfigASDK\ConfigASDK.ps1, you should find the Scripts folder located at C:\C
 
     $scriptStep = "LAUNCHJOBS"
     # Get current free space on the drive used to hold the Azure Stack images
-    Write-CustomVerbose -Message "Calculating free disk space on Cluster Shared Volume, to plan image upload concurrency"
+    Write-CustomVerbose -Message "Calculating free disk space on target volume, to plan image upload concurrency"
     Start-Sleep 5
-    $freeCSVSpace = [int](((Get-ClusterSharedVolume | Select-Object -Property Name -ExpandProperty SharedVolumeInfo).Partition.FreeSpace) / 1GB)
-    Write-CustomVerbose -Message "Free space on Cluster Shared Volume = $($freeCSVSpace)GB"
+    if (!$mn) {
+        $freeSpace = [int](((Get-ClusterSharedVolume | Select-Object -Property Name -ExpandProperty SharedVolumeInfo).Partition.FreeSpace) / 1GB)
+    }
+    else {
+        $freeSpace = [int](((Get-Volume -FilePath "$ASDKpath").SizeRemaining) / 1GB)
+    }
+    Write-CustomVerbose -Message "Free space on chosen volume = $($freeSpace)GB"
     Start-Sleep 3
 
     if ($null -eq $ISOPath2019) {
@@ -2111,23 +2133,23 @@ C:\ConfigASDK\ConfigASDK.ps1, you should find the Scripts folder located at C:\C
         $xlg = "200"
     }
 
-    if ($freeCSVSpace -lt $sm) {
+    if ($freeSpace -lt $sm) {
         Write-CustomVerbose -Message "Free space is less than $($sm)GB - you don't have enough room on the drive to create the Windows Server image with updates"
         throw "You need additional space to create a Windows Server image. Minimum required free space is $($sm)GB"
     }
-    elseif ($freeCSVSpace -ge $sm -and $freeCSVSpace -lt $md) {
+    elseif ($freeSpace -ge $sm -and $freeSpace -lt $md) {
         Write-CustomVerbose -Message "Free space is less than $($md)GB - you don't have enough room on the drive to create all Ubuntu Server and Windows Server images in parallel"
         Write-CustomVerbose -Message "Your Ubuntu Server and Windows Server images will be created serially.  This could take some time."
         # Create images: 1. Ubuntu + Windows Update in parallel 2. Windows Server Core 3. Windows Server Full (+ WS 2019 Core, + WS 2019 Full Optionally)
         $runMode = "serial"
     }
-    elseif ($freeCSVSpace -ge $med -and $freeCSVSpace -lt $lg) {
+    elseif ($freeSpace -ge $med -and $freeSpace -lt $lg) {
         Write-CustomVerbose -Message "Free space is less than $($lg)GB - you don't have enough room on the drive to create all Ubuntu Server and Windows Server images in parallel"
         Write-CustomVerbose -Message "Your Ubuntu Server will be created first, then Windows Server images will be created in parallel.  This could take some time."
         # Create images: 1. Ubuntu + Windows Update in parallel 2. Windows Server Core and Windows Server Full in parallel after both prior jobs have finished 3. (+ WS 2019 Core, + WS 2019 Full Optionally)
         $runMode = "partialParallel"
     }
-    elseif ($freeCSVSpace -ge $xlg) {
+    elseif ($freeSpace -ge $xlg) {
         Write-CustomVerbose -Message "Free space is more than $($xlg)GB - you have enough room on the drive to create all Ubuntu Server and Windows Server images in parallel"
         Write-CustomVerbose -Message "This is the fastest way to populate the Azure Stack Platform Image Repository."
         # Create images: 1. Ubuntu + Windows Update in parallel 2. Windows Server Core and Windows Server Full in parallel (+ WS 2019 Core, + WS 2019 Full Optionally) after Windows Update job is finished.
@@ -2138,12 +2160,12 @@ C:\ConfigASDK\ConfigASDK.ps1, you should find the Scripts folder located at C:\C
     $jobName = "AddUbuntuImage"
     $AddUbuntuImage = {
         Start-Job -Name AddUbuntuImage -InitializationScript $export_functions -ArgumentList $ISOpath, $ISOPath2019, $ASDKpath, $customDomainSuffix, $registerASDK, $deploymentMode, $modulePath, `
-            $azureRegSubId, $azureRegTenantID, $tenantID, $azureRegCreds, $asdkCreds, $ScriptLocation, $branch, $sqlServerInstance, $databaseName, $tableName -ScriptBlock {
+            $azureRegSubId, $azureRegTenantID, $tenantID, $azureRegCreds, $asdkCreds, $ScriptLocation, $branch, $sqlServerInstance, $databaseName, $tableName, $mn -ScriptBlock {
             Set-Location $Using:ScriptLocation; .\Scripts\AddImage.ps1 -ASDKpath $Using:ASDKpath `
                 -customDomainSuffix $Using:customDomainSuffix -registerASDK $Using:registerASDK -deploymentMode $Using:deploymentMode -modulePath $Using:modulePath `
                 -azureRegSubId $Using:azureRegSubId -azureRegTenantID $Using:azureRegTenantID -tenantID $Using:TenantID -azureRegCreds $Using:azureRegCreds `
                 -asdkCreds $Using:asdkCreds -ScriptLocation $Using:ScriptLocation -ISOpath $Using:ISOpath -ISOPath2019 $Using:ISOPath2019 -image "UbuntuServer" -branch $Using:branch -runMode $Using:runMode `
-                -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName
+                -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName -mn $Using:mn
         } -Verbose -ErrorAction Stop
     }
     JobLauncher -jobName $jobName -jobToExecute $AddUbuntuImage -Verbose
@@ -2163,11 +2185,11 @@ C:\ConfigASDK\ConfigASDK.ps1, you should find the Scripts folder located at C:\C
     $AddServerCore2016Image = {
         Start-Job -Name AddServerCore2016Image -InitializationScript $export_functions -ArgumentList $ASDKpath, $customDomainSuffix, $registerASDK, $deploymentMode, `
             $modulePath, $azureRegSubId, $azureRegTenantID, $tenantID, $azureRegCreds, $asdkCreds, $ScriptLocation, $runMode, $ISOpath, $ISOPath2019, $branch, `
-            $sqlServerInstance, $databaseName, $tableName -ScriptBlock {
+            $sqlServerInstance, $databaseName, $tableName, $mn -ScriptBlock {
             Set-Location $Using:ScriptLocation; .\Scripts\AddImage.ps1 -ASDKpath $Using:ASDKpath -customDomainSuffix $Using:customDomainSuffix -registerASDK $Using:registerASDK `
                 -deploymentMode $Using:deploymentMode -modulePath $Using:modulePath -azureRegSubId $Using:azureRegSubId -azureRegTenantID $Using:azureRegTenantID `
                 -tenantID $Using:TenantID -azureRegCreds $Using:azureRegCreds -asdkCreds $Using:asdkCreds -ScriptLocation $Using:ScriptLocation -ISOpath $Using:ISOpath -ISOPath2019 $Using:ISOPath2019 `
-                -image "ServerCore2016" -branch $Using:branch -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName -runMode $Using:runMode
+                -image "ServerCore2016" -branch $Using:branch -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName -runMode $Using:runMode -mn $Using:mn
         } -Verbose -ErrorAction Stop
     }
     JobLauncher -jobName $jobName -jobToExecute $AddServerCore2016Image -Verbose
@@ -2176,12 +2198,12 @@ C:\ConfigASDK\ConfigASDK.ps1, you should find the Scripts folder located at C:\C
     $AddServerFull2016Image = {
         Start-Job -Name AddServerFull2016Image -InitializationScript $export_functions -ArgumentList $ASDKpath, $customDomainSuffix, `
             $registerASDK, $deploymentMode, $modulePath, $azureRegSubId, $azureRegTenantID, $tenantID, $azureRegCreds, $asdkCreds, $ScriptLocation, `
-            $runMode, $ISOpath, $ISOPath2019, $branch, $sqlServerInstance, $databaseName, $tableName -ScriptBlock {
+            $runMode, $ISOpath, $ISOPath2019, $branch, $sqlServerInstance, $databaseName, $tableName, $mn -ScriptBlock {
             Set-Location $Using:ScriptLocation; .\Scripts\AddImage.ps1 -ASDKpath $Using:ASDKpath `
                 -customDomainSuffix $Using:customDomainSuffix -registerASDK $Using:registerASDK -deploymentMode $Using:deploymentMode -modulePath $Using:modulePath `
                 -azureRegSubId $Using:azureRegSubId -azureRegTenantID $Using:azureRegTenantID -tenantID $Using:TenantID -azureRegCreds $Using:azureRegCreds `
                 -asdkCreds $Using:asdkCreds -ScriptLocation $Using:ScriptLocation -ISOpath $Using:ISOpath -ISOPath2019 $Using:ISOPath2019 -image "ServerFull2016" -branch $Using:branch `
-                -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName -runMode $Using:runMode
+                -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName -runMode $Using:runMode -mn $Using:mn
         } -Verbose -ErrorAction Stop
     }
     JobLauncher -jobName $jobName -jobToExecute $AddServerFull2016Image -Verbose
@@ -2190,11 +2212,11 @@ C:\ConfigASDK\ConfigASDK.ps1, you should find the Scripts folder located at C:\C
     $AddServerCore2019Image = {
         Start-Job -Name AddServerCore2019Image -InitializationScript $export_functions -ArgumentList $ASDKpath, $customDomainSuffix, $registerASDK, $deploymentMode, `
             $modulePath, $azureRegSubId, $azureRegTenantID, $tenantID, $azureRegCreds, $asdkCreds, $ScriptLocation, $runMode, $ISOpath, $ISOPath2019, $branch, `
-            $sqlServerInstance, $databaseName, $tableName -ScriptBlock {
+            $sqlServerInstance, $databaseName, $tableName, $mn -ScriptBlock {
             Set-Location $Using:ScriptLocation; .\Scripts\AddImage.ps1 -ASDKpath $Using:ASDKpath -customDomainSuffix $Using:customDomainSuffix -registerASDK $Using:registerASDK `
                 -deploymentMode $Using:deploymentMode -modulePath $Using:modulePath -azureRegSubId $Using:azureRegSubId -azureRegTenantID $Using:azureRegTenantID `
                 -tenantID $Using:TenantID -azureRegCreds $Using:azureRegCreds -asdkCreds $Using:asdkCreds -ScriptLocation $Using:ScriptLocation -ISOpath $Using:ISOpath -ISOPath2019 $Using:ISOPath2019 `
-                -image "ServerCore2019" -branch $Using:branch -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName -runMode $Using:runMode
+                -image "ServerCore2019" -branch $Using:branch -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName -runMode $Using:runMode -mn $Using:mn
         } -Verbose -ErrorAction Stop
     }
     JobLauncher -jobName $jobName -jobToExecute $AddServerCore2019Image -Verbose
@@ -2203,12 +2225,12 @@ C:\ConfigASDK\ConfigASDK.ps1, you should find the Scripts folder located at C:\C
     $AddServerFull2019Image = {
         Start-Job -Name AddServerFull2019Image -InitializationScript $export_functions -ArgumentList $ASDKpath, $customDomainSuffix, `
             $registerASDK, $deploymentMode, $modulePath, $azureRegSubId, $azureRegTenantID, $tenantID, $azureRegCreds, $asdkCreds, $ScriptLocation, `
-            $runMode, $ISOpath, $ISOPath2019, $branch, $sqlServerInstance, $databaseName, $tableName -ScriptBlock {
+            $runMode, $ISOpath, $ISOPath2019, $branch, $sqlServerInstance, $databaseName, $tableName, $mn -ScriptBlock {
             Set-Location $Using:ScriptLocation; .\Scripts\AddImage.ps1 -ASDKpath $Using:ASDKpath `
                 -customDomainSuffix $Using:customDomainSuffix -registerASDK $Using:registerASDK -deploymentMode $Using:deploymentMode -modulePath $Using:modulePath `
                 -azureRegSubId $Using:azureRegSubId -azureRegTenantID $Using:azureRegTenantID -tenantID $Using:TenantID -azureRegCreds $Using:azureRegCreds `
                 -asdkCreds $Using:asdkCreds -ScriptLocation $Using:ScriptLocation -ISOpath $Using:ISOpath -ISOPath2019 $Using:ISOPath2019 -image "ServerFull2019" -branch $Using:branch `
-                -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName -runMode $Using:runMode
+                -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName -runMode $Using:runMode -mn $Using:mn
         } -Verbose -ErrorAction Stop
     }
     JobLauncher -jobName $jobName -jobToExecute $AddServerFull2019Image -Verbose

@@ -57,7 +57,10 @@ param (
     [String] $databaseName,
 
     [Parameter(Mandatory = $true)]
-    [String] $tableName
+    [String] $tableName,
+
+    [Parameter(Mandatory = $false)]
+    [String] $mn
 )
 
 $Global:VerbosePreference = "Continue"
@@ -96,7 +99,12 @@ $progressCheck = CheckProgress -progressStage $progressStage
 $asdkImagesRGName = "azurestack-images"
 $asdkImagesStorageAccountName = "asdkimagesstor"
 $asdkImagesContainerName = "asdkimagescontainer"
-$csvImagePath = "C:\ClusterStorage\Volume1"
+if (!$mn) {
+    $csvImagePath = "C:\ClusterStorage\Volume1"
+}
+else {
+    $csvImagePath = "$ASDKpath"
+}
 
 if (!$([System.IO.Directory]::Exists("$ASDKpath\images"))) {
     New-Item -Path "$ASDKpath\images" -ItemType Directory -Force | Out-Null   
@@ -112,11 +120,14 @@ if ($ISOPath2019) {
 if (!$([System.IO.Directory]::Exists("$ASDKpath\images\$image"))) {
     New-Item -Path "$ASDKpath\images\$image" -ItemType Directory -Force | Out-Null
 }
-if (!$([System.IO.Directory]::Exists("$csvImagePath\images"))) {
-    New-Item -Path "$csvImagePath\images" -ItemType Directory -Force | Out-Null
-}
-if (!$([System.IO.Directory]::Exists("$csvImagePath\Images\$image"))) {
-    New-Item -Path "$csvImagePath\Images\$image" -ItemType Directory -Force | Out-Null
+
+if (!$mn) {
+    if (!$([System.IO.Directory]::Exists("$csvImagePath\images"))) {
+        New-Item -Path "$csvImagePath\images" -ItemType Directory -Force | Out-Null
+    }
+    if (!$([System.IO.Directory]::Exists("$csvImagePath\Images\$image"))) {
+        New-Item -Path "$csvImagePath\Images\$image" -ItemType Directory -Force | Out-Null
+    }
 }
 
 # Check if 2019 images are going to be created by confirming ISO path is present
